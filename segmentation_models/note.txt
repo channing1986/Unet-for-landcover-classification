@@ -1,0 +1,8 @@
+this training is to test the effect of using differnt learn rate for the bridge detection.
+1. net model: u-net with 256*256 inputs. 
+2. input data: C:\TrainData\Track3\Train\patch_512(only bridge) with online data augement.
+3. pre-trained weight:'./checkpoint_track3-single/', 'weights.120.hdf5'
+4. learn rate: 10-3.
+5. train bath: 20*2.
+6. epoch: 200
+7. loss: dynamic-weight loss.
