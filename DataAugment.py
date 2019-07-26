@@ -443,7 +443,7 @@ def patch2img_height(patches,img_size,patch_weights,num_class=5, overlap=0.5):
     pred=np.array(pred,np.float32)
     return pred
 
-def patch2img_new(patches,img_size,patch_weights,num_class=5, overlap=0.5):
+def Patch2Img(patches,img_size,patch_weights,num_class=5, overlap=0.5):
     patches=np.squeeze(patches)
     patch_wid=patches[0].shape[1]
     patch_hei=patches[0].shape[0]
@@ -461,22 +461,12 @@ def patch2img_new(patches,img_size,patch_weights,num_class=5, overlap=0.5):
             weighted_patch=currLabel*patch_weights
             #for i in range(5):
             vote[y_s:y_e,x_s:x_e,:]=vote[y_s:y_e,x_s:x_e,:]+weighted_patch
-
-    # for i in range(len(patches)):
-    #     patch_id=i//4
-    #     patch=np.squeeze(patches[i])
-    #     for x in range(patch_wid):
-    #         for y in range(patch_hei):
-    #             id_y=round(patch_ranges[patch_id][0])+y
-    #             id_x=round(patch_ranges[patch_id][2])+x
-    #             c=patch[y,x]
-    #             vote[id_y,id_x,c]=vote[id_y,id_x,c]+1#patch_weights[y,x]
     pred = np.argmax(vote, axis=-1).astype('uint8')
     #pred=vote
     return pred
 
 
-def patch2img(patches,img_size,patch_weights,num_class=5, overlap=0.5):
+def Patch2Img(patches,img_size,patch_weights,num_class=5, overlap=0.5):
     patches=np.squeeze(patches)
     if len(patches.shape)<3:
         patch_wid=patches.shape[1]
@@ -1036,9 +1026,37 @@ def DataSampleAnalysis(img_folder,label_folder,out_folder,path_size,overlap_rati
 #     f_ground.close()
 
 
-def GenerateBuildingDetectionData(data_folder, label_folder, BuildingData_out):
-    ##building size analises.
-    sizes,patch_list,=FindAllBuildingSizes(label_folder)
+def PreAug(test_image): 
+    img_aug=[] 
+    if len(test_image.shape)>4:
+        for i in range(len(test_image)):
+            img_data=test_image[i]
+            for a_id in range (4):
+                img_a=np.rot90(img_data,4-a_id)
+                img_aug.append(img_a)
+    else:
+        for a_id in range (4):
+            img_a=np.rot90(test_image,4-a_id)
+            img_aug.append(img_a)
+    return img_aug
+
+def PreAugBack(test_image): 
+    img_back=[]
+    if len(test_image.shape)>4:
+        for id in range(len(test_image)):
+            img=test_image[id]
+            i=id%4
+            if i==0:
+                img_back.append(img)
+            else:
+                for mmm in range (i):
+                    img=np.squeeze(img)
+                    img=np.rot90(img)
+                    img = np.expand_dims(img, axis=0)
+                img_back.append(img)
+    else:
+        img_back.append(test_image)
+    return img_back
 
 
 if __name__ == '__main__':

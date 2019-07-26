@@ -675,6 +675,57 @@ def load_all_data_files_balanced_patches(data_folder,label_folder='',text_files=
         return imgs,gts,extras,  imgs_v, gts_v, extras_v
     else:
         return imgs, gts, imgs_v,  gts_v
+def load_all_data_files(data_folder,vali_ratio=0.1):
+    IMG_FOLDER='img_patch'
+    LABEL_FOLDER='label_patch'
+    IMG_TXT='img_list.txt'
+    LABEL_TXT='label_list.txt'
+    ortho_txt=os.path.join(data_folder,IMG_TXT)
+    label_txt=os.path.join(data_folder,LABEL_TXT)
+    orthos=[]
+    label=[]
+    fp = open(ortho_txt)
+    lines = fp.readlines()
+    for line in lines:
+            line = line.strip('\n')           
+            orthos.append(os.path.join(data_folder,IMG_FOLDER,line))
+    fp.close()
+    fp = open(label_txt)
+    lines = fp.readlines()
+    for line in lines:
+            line = line.strip('\n')           
+            label.append(os.path.join(data_folder,LABEL_FOLDER,line))
+    fp.close()
+    if len(orthos)!=len(label):
+        return [], [],[],[]
+    num=round(len(orthos)*(1-vali_ratio))
+    return orthos[:num],label[:num],orthos[num:],label[num:]
+
+
+def load_all_data_test(data_folder,channels='rgb'):
+    imgs=[]
+    pathes=[]
+    #img_folder=os.path.join(data_folder,'epipolar image')
+    img_folder=os.path.join(data_folder,'imgs')
+    if channels[:3]=='rgb':        
+        img_files = glob.glob(os.path.join(img_folder, '*RGB.tif'))
+    elif channels[:3]=='msi':
+        img_files = glob.glob(os.path.join(img_folder, '*MSI.tif'))
+
+    for imgPath in img_files:
+        imageName = os.path.split(imgPath)[-1]
+        imgs.append(imageName)
+        pathes.append(imgPath)
+    ###########################
+    ortho_list_file=os.path.join(data_folder,'test_img_list.txt')
+
+    f_ortho = open(ortho_list_file,'w')
+ 
+    for i in range(len(imgs)):
+        f_ortho.write(imgs[i]+'\n');
+    f_ortho.close()
+    return pathes
+
 def GetSmallTreeLabel(label_folder,out_folder):
     from skimage import data, util, color,measure
     import matplotlib.pyplot as plt
