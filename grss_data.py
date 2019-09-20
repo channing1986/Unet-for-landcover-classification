@@ -25,6 +25,8 @@ EXTRA_format='h'
 EXTRA_data=False
 NUM_class=3
 is_MSI=False
+
+
 def get_batch_inds(batch_size, idx, N,predict=False):
     """
     Generates an array of indices of length N
@@ -154,16 +156,16 @@ def input_generator(img_files, label_files, batch_size, extra_files=[],net_name=
             if 0:
                 import matplotlib.pyplot as plt 
                 plt.subplot(221) #用于显示多个子图121代表行、列、位置
-                plt.imshow(imgdata[0,:,:,0:3])
+                plt.imshow(imgdata[0,:,:])
                 plt.title('org')
                 plt.subplot(222)
-                plt.imshow(gts[0,:,:,0])
+                plt.imshow(imgdata[1,:,:])
                 plt.title('background') #添加标题
                 plt.subplot(223)
-                plt.imshow(gts[0,:,:,2])
+                plt.imshow(gts[0,:,:,1])
                 plt.title('dsm') #添加标题
                 plt.subplot(224)
-                plt.imshow(gts[0,:,:,4])
+                plt.imshow(gts[1,:,:,1])
                 plt.title('roof') #添加标题
                 plt.show()
             yield (imgdata, gts)
@@ -261,10 +263,11 @@ def _load_batch_helper(inputDict):
                 plt.title('rote90') #添加标题
                 plt.show()
             
-    if gts_file[-9:-6]=='CLS':
-        currLabel=np.array(label_data,np.float)
-        currLabel = to_categorical(currLabel, num_classes=int(num_class)+1)
-        label_data =currLabel[:,:,0:-1]
+    currLabel=np.array(label_data,np.float)
+    label_data = to_categorical(currLabel, num_classes=int(num_class))
+    Remove_last_label=False
+    if Remove_last_label:
+        label_data =label_data[:,:,0:-1]
     if len(extra_file)>3:
         extra_data = extra_data[:,:,np.newaxis]
         label_data=np.concatenate((label_data, extra_data), axis=-1)
@@ -936,7 +939,7 @@ def InputDataProcessing(img,channels,extradata):
             plt.imshow(img_a)
             plt.title('rote90') #添加标题
             plt.subplot(133)
-            plt.imshow(img_a2)
+            plt.imshow(img_a)
             plt.title('rote90_2') #添加标题
             plt.show()
            # auger=getAuger_p_p(a_id)

@@ -1,3 +1,4 @@
 checkpoint
 prediction
-checkpoint/unet_rgb_c/train.csv
+.vscode
+__pycache__

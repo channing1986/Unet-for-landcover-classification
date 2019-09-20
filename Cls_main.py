@@ -15,7 +15,7 @@ import json
 import tensorflow as tf
 import params
 #from scipy.special import softmax
-from grss_data import input_generator
+from grss_data import input_generator,get_batch_inds
 from grss_models import get_model
 #from track1_data import load_all_data_files,input_load_train_data,input_generator_online_process,input_generator_RGB
 from grss_data import load_all_data_files_balanced_patches,load_all_data_test,load_all_data_files
@@ -100,7 +100,7 @@ class Class_net:
             os.mkdir(results_folder)
         
         from dataFunctions import convert_labels
-        from track3_data import get_batch_inds
+        
         #####
         channels=net_name.split('_')[1]
         #img_test=load_all_data_test_val(data_folder,channels)
@@ -168,10 +168,10 @@ def train_net(data_folder):
     detector.train(data_folder=data_folder,weighted_loss=weighted_loss,patch_balance=patch_balance)
 
 def test_net(data_folder):
-    from track1_data import Merge_all_results_with_baseline,Merge_temparal_results
+
     detector=Class_net(params)
     net_name='unet_rgb_c'
-    weight_file='weights.01.hdf5'
+    weight_file='weights.35.hdf5'
     weight_path=os.path.join(params.CHECKPOINT_DIR,net_name,weight_file)
     results_folder=os.path.join(params.OUTPUT_DIR,net_name+weight_file)
     num_class=params.NUM_CATEGORIES
@@ -180,8 +180,9 @@ def test_net(data_folder):
 
 if __name__ == '__main__':
 
-    #train_net('C:/TrainData/Track1/train/patch_512')
-    test_net('C:/TrainData/track3/Test_new/')
+    data_folder=r'C:\TianZhi2019\data'
+    train_net(data_folder)
+    #test_net('C:/TrainData/track3/Test_new/')
     #test_net('C:/TrainData/Track1/train/')
     #test_net('C:/TrainData/Track1/Test-Track1',False)
  #   test_net('G:/shengxi',False)

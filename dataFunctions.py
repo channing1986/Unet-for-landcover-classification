@@ -137,8 +137,12 @@ def load_img(imgPath):
         img = tifffile.imread(imgPath)
     else:
         #raise ValueError('Install pillow and uncomment line in load_img')
-        img = np.array(cv2.imread(imgPath))
-        img=cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
+        img = np.array(cv2.imread(imgPath,-1))
+        if imgPath.endswith('.png') and len(img.shape)>2:
+            if img.shape[2]==4:        ##convert the image from RGBA2RGB  
+                img = cv2.cvtColor(img, cv2.COLOR_BGRA2RGB) 
+        elif len(img.shape)>2 and img.shape[2]==3 :
+            img=cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
     return img
 
 def visualize(image, mask, original_image=None, original_mask=None):

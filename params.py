@@ -8,27 +8,27 @@ import os
 
 # TRAIN_DIR = 'G:/DataSet/GRSS2019Contest/Track1-RGB/'
 # LABEL_DIR = 'G:/DataSet/GRSS2019Contest/Train-Track1-Truth/Track1-Truth/'
-TRAIN_DIR = 'G:/DataSet/GRSS2019Contest/Track1-RGB_pathces_512/img_patch/'
-LABEL_DIR = 'G:/DataSet/GRSS2019Contest/Track1-RGB_pathces_512/label_patch/'
+# TRAIN_DIR = 'G:/DataSet/GRSS2019Contest/Track1-RGB_pathces_512/img_patch/'
+# LABEL_DIR = 'G:/DataSet/GRSS2019Contest/Track1-RGB_pathces_512/label_patch/'
 CHECKPOINT_DIR = './checkpoint/'
-TEST_DIR = 'G:/DataSet/GRSS2019Contest/Validate-Track1/Track1/'
+# TEST_DIR = 'G:/DataSet/GRSS2019Contest/Validate-Track1/Track1/'
 OUTPUT_DIR = './prediction/'
-OUTPUT_DIR_TRACK3='../data/validate/Track3-Submission-4_weightedPatchMerge/'
-SINGLEVIEW_TEST_MODEL = '../weights/181206-unet-height-weights.60.hdf5'
-#SEMANTIC_TEST_MODEL = '../weights/181219-unet-semantic-weights.40.hdf5'
-SEMANTIC_TEST_MODEL = '../weights/190214-unet256-semantic-weight.80.hdf5'
+# OUTPUT_DIR_TRACK3='../data/validate/Track3-Submission-4_weightedPatchMerge/'
+# SINGLEVIEW_TEST_MODEL = '../weights/181206-unet-height-weights.60.hdf5'
+# #SEMANTIC_TEST_MODEL = '../weights/181219-unet-semantic-weights.40.hdf5'
+# SEMANTIC_TEST_MODEL = '../weights/190214-unet256-semantic-weight.80.hdf5'
 if not os.path.isdir(OUTPUT_DIR):
     os.makedirs(OUTPUT_DIR)
 
-if not os.path.isdir(OUTPUT_DIR_TRACK3):
-    os.makedirs(OUTPUT_DIR_TRACK3)
+# if not os.path.isdir(OUTPUT_DIR_TRACK3):
+#     os.makedirs(OUTPUT_DIR_TRACK3)
 
 if not os.path.isdir(CHECKPOINT_DIR):
     os.makedirs(CHECKPOINT_DIR)
 
-CONTINUE_TRAINING = True
-CONTINUE_SEMANTIC_MODEL_FILE = SEMANTIC_TEST_MODEL
-CONTINUE_SINGLEVIEW_MODEL_FILE = SINGLEVIEW_TEST_MODEL
+# CONTINUE_TRAINING = True
+# CONTINUE_SEMANTIC_MODEL_FILE = SEMANTIC_TEST_MODEL
+# CONTINUE_SINGLEVIEW_MODEL_FILE = SINGLEVIEW_TEST_MODEL
 
 
 CHECKPOINT_PATH = os.path.join(CHECKPOINT_DIR, 'weights.{epoch:02d}.hdf5')
@@ -49,7 +49,7 @@ MAX_VAL = 65536  # MSI images are int16, so dividing by this instead of 255
 # ----------------------------------------------------
 # MODEL TRAINING/TESTING
 
-GPUS = '1'  # GPU indices to restrict usage
+GPUS = '3'  # GPU indices to restrict usage
 NUM_CHANNELS = 3
 BATCH_SZ = 6
 #IMG_SZ = (1024, 1024)  # this code assumes all images in the training set have the same numbers of rows and columns

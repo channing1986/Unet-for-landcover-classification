@@ -3,7 +3,6 @@ from imgaug import augmenters as iaa
 import imageio
 import numpy as np
 import params
-import facade_params
 from osgeo import gdal, gdalconst
 import cv2
 import os
@@ -13,10 +12,106 @@ import glob
 from dataFunctions import convert_labels,load_img
 import matplotlib.pyplot as plt
 import tifffile
+
+
 ia.seed(1)
 CONTRAST_RANGE=(0.8, 2.0)
 PERSPECTIVE_RANGE=(0.05, 0.09)
 
+def get_batch_inds(batch_size, idx, N,predict=False):
+    """
+    Generates an array of indices of length N
+    :param batch_size: the size of training batches
+    :param idx: data to split into batches
+    :param N: Maximum size
+    :return batchInds: list of arrays of data of length batch_size
+    """
+    batchInds = []
+    idx0 = 0
+
+    toProcess = True
+    while toProcess:
+        idx1 = idx0 + batch_size
+        if idx1 >= N:
+            idx1 = N
+            if predict==False:
+
+                idx0 = idx1 - batch_size
+            toProcess = False
+        batchInds.append(idx[idx0:idx1])
+        idx0 = idx1
+
+    return batchInds
+
+def normalize_image_to_path(img_path,label_path,path_size,overlap_ratio,work_region=[],resize2size=[],extra_input=False, convertLab=False,pad_edge=1,normalize_dsm=1, image_order=0):
+    
+    img=load_img(img_path)
+    if label_path:
+        couple_input=True
+        label=load_img(label_path)
+    else:
+        couple_input=False
+    if couple_input:
+        if convertLab:
+            label=convertLas2Train(label, params.LABEL_MAPPING_LAS2TRAIN)
+        elif normalize_dsm:
+            nan_data=np.isnan(label)
+            label[nan_data] = 99999
+            min_t=label.min()
+            label=label-min_t
+            label[nan_data]=0
+
+    if len(work_region)>0:
+        img = img[:,work_region[0]:work_region[1],work_region[2]:work_region[3]]
+        if couple_input:
+            if (label.shape[0]>work_region[1]-work_region[0] or label.shape[1]>work_region[3]-work_region[2]):
+                label=label[:,work_region[0]:work_region[1],work_region[2]:work_region[3]]
+
+    if len(resize2size)>0:
+        img=cv2.resize(img,resize2size)
+        if couple_input:
+            label=cv2.resize(label,resize2size,interpolation=cv2.INTER_NEAREST)
+
+    imgs=[]
+    labels=[]
+
+    if img.shape[0]==path_size[0] and img.shape[1]==path_size[1]:
+        imgs.append(img)
+        labels.append(label)
+        return imgs,labels,[path_size[0],path_size[1]]
+    else:
+        if img.shape[0]<path_size[0]:
+            padded_img= np.zeros((path_size[0],img.shape[1],img.shape[2]), dtype=img.dtype)
+            padded_label= np.ones((path_size[0],img.shape[1],img.shape[2]), dtype=label.dtype)*facade_params.train_background
+            padding_step=round((path_size[0]-img.shape[0])/2)
+            padded_img[padding_step:padding_step+img.shape[0],:,:]=img
+            padded_label[padding_step:padding_step+img.shape[0],:,:]=label
+            img=padded_img
+            label=padded_label
+        if img.shape[1]<path_size[1]:
+            padded_img= np.zeros((img.shape[0],path_size[1],img.shape[2]), dtype=img.dtype)
+            padded_label= np.ones((img.shape[0],path_size[1],img.shape[2]), dtype=label.dtype)*facade_params.train_background
+            padding_step=round((path_size[1]-img.shape[1])/2)
+            padded_img[:,padding_step:padding_step+img.shape[1],:]=img
+            padded_label[:,padding_step:padding_step+img.shape[1],:]=label
+            img=padded_img
+            label=padded_label
+
+    rows=img.shape[0]
+    cols=img.shape[1]
+
+    patch_ranges=calculate_cut_range([rows,cols], patch_size=path_size,overlap=overlap_ratio)    
+    for inds in range(len(patch_ranges)):
+        y_s=round(patch_ranges[inds][0])
+        y_e=round(patch_ranges[inds][1])
+        x_s=round(patch_ranges[inds][2])
+        x_e=round(patch_ranges[inds][3])
+        img_patch=img[int(y_s):int(y_e),int(x_s):int(x_e)]
+        imgs.append(img_patch)
+        if couple_input:
+            label_patch=label[int(y_s):int(y_e),int(x_s):int(x_e)]
+            labels.append(label_patch)
+    return imgs,labels,[rows,cols]
 
 def getAuger_online(contrast_range,Perspective_range):
     roate=random.randint(0,4)
@@ -110,134 +205,6 @@ class GRID:
                 dataset.GetRasterBand(i+1).WriteArray(im_data[i])
 
         del dataset
-
-def normalize_image_to_path(img_path,label_path,path_size,overlap_ratio,work_region=[],resize2size=[],extra_input=False, convertLab=False,pad_edge=1,normalize_dsm=1, image_order=0):
-    from grss_data import convertMSI2watertreedata
-    if 1:#img_path[:-3]=='tif'):
-        #gd_reader = GRID()
-        is_msi=0
-        if is_msi:
-            img=convertMSI2watertreedata(img_path)
-        else:
-            img=load_img(img_path)
-            #aa=0
-        #img=img.transpose(2,0,1)
-        image_order=0
-        #proj,geotrans,img = gd_reader.read_img(img_path)
-        if len(label_path)>3:
-            extra_input=True
-            label=load_img(label_path)
-            #proj,geotrans,label = gd_reader.read_img(label_path)
-        else:
-            label=img
-            #label_input=False
-    else:
-        img=img_path
-        label=label_path
-
-
-    if extra_input:
-        if convertLab:
-            label=convertLas2Train(label, params.LABEL_MAPPING_LAS2TRAIN)
-        elif normalize_dsm:
-            nan_data=np.isnan(label)
-            label[nan_data] = 99999
-            min_t=label.min()
-            label=label-min_t
-            label[nan_data]=0
-
-    if len(work_region)>0:
-        img = img[:,work_region[0]:work_region[1],work_region[2]:work_region[3]]
-        if extra_input:
-            if (label.shape[0]>work_region[1]-work_region[0] or label.shape[1]>work_region[3]-work_region[2]):
-                label=label[:,work_region[0]:work_region[1],work_region[2]:work_region[3]]
-
-    if len(resize2size)>0:
-        if image_order==1:
-            img = img.transpose(1,2,0)
-        img=cv2.resize(img,resize2size)
-        if image_order==1:
-            img=img.transpose(2,0,1)
-        if extra_input:
-            label=cv2.resize(label,resize2size,interpolation=cv2.INTER_NEAREST)
-    
-
-
-
-    imgs=[]
-    labels=[]
-
-
-    if img.shape[0]==path_size[0] and img.shape[1]==path_size[1]:
-        imgs.append(img)
-        labels.append(label)
-        return imgs,labels,[path_size[0],path_size[1]]
-    else:
-        if img.shape[0]<path_size[0]:
-            padded_img= np.zeros((path_size[0],img.shape[1],img.shape[2]), dtype=img.dtype)
-            padded_label= np.ones((path_size[0],img.shape[1],img.shape[2]), dtype=label.dtype)*facade_params.train_background
-            padding_step=round((path_size[0]-img.shape[0])/2)
-            padded_img[padding_step:padding_step+img.shape[0],:,:]=img
-            padded_label[padding_step:padding_step+img.shape[0],:,:]=label
-            img=padded_img
-            label=padded_label
-        if img.shape[1]<path_size[1]:
-            padded_img= np.zeros((img.shape[0],path_size[1],img.shape[2]), dtype=img.dtype)
-            padded_label= np.ones((img.shape[0],path_size[1],img.shape[2]), dtype=label.dtype)*facade_params.train_background
-            padding_step=round((path_size[1]-img.shape[1])/2)
-            padded_img[:,padding_step:padding_step+img.shape[1],:]=img
-            padded_label[:,padding_step:padding_step+img.shape[1],:]=label
-            img=padded_img
-            label=padded_label
-
-    # cv2.imshow('input_img',img)
-    # cv2.imshow('label',label*20)
-    # cv2.waitKeyEx()
-    if image_order==0:
-        rows=img.shape[0]
-        cols=img.shape[1]
-    elif image_order==1:
-        rows=img.shape[1]
-        cols=img.shape[2]    
-    if(1):
-    #        patch_ranges=calculate_cut_range(img.shape[1:3], patch_size=[path_size[0],path_size[1]],overlap=overlap_ratio)
-
-
-        patch_height = path_size[0]
-        patch_width = path_size[1]
-        width_overlap = patch_width * overlap_ratio
-        height_overlap = patch_height *overlap_ratio
-        x_e = 0
-        while (x_e < cols):
-            y_e=0
-            x_s = max(0, x_e - width_overlap);
-            x_e = x_s + patch_width;
-            if (x_e > cols):
-                x_e = cols
-            if (pad_edge == 1): ## if the last path is not enough, then extent to the inerside.
-                x_s = x_e - patch_width
-            if (pad_edge == 2):## if the last patch is not enough, then extent to the outside(with black).
-                x_s=x_s
-            while (y_e < rows):
-                y_s = max(0, y_e - height_overlap);
-                y_e = y_s + patch_height;
-                if (y_e > rows):
-                    y_e = rows;
-                if (pad_edge == 1): ## if the last path is not enough, then extent to the inerside.
-                    y_s = y_e - patch_height
-                if (pad_edge == 2):## if the last patch is not enough, then extent to the outside(with black).
-                    y_s=y_s
-            #    range_1=[int(y_s),int(y_e)]
-                if image_order==0:
-                    img_patch=img[int(y_s):int(y_e),int(x_s):int(x_e),:]
-                else:
-                    img_patch=img[:,int(y_s):int(y_e),int(x_s):int(x_e)]
-                if extra_input:
-                    label_patch=label[int(y_s):int(y_e),int(x_s):int(x_e)]
-                imgs.append(img_patch)
-                if extra_input:
-                    labels.append(label_patch)
-    return imgs,labels,[rows,cols]
 
 def img2patches(img, patch_size,overlap_rati):
     patches=[]
@@ -395,7 +362,7 @@ def GetPatchWeight(patch_size=[256,256],pad=32,last_value=0.4):
                 weight=1
             patch_weights[y,x]=weight
     return patch_weights
-from track3_data import get_batch_inds
+
 def patch2img_height(patches,img_size,patch_weights,num_class=5, overlap=0.5):
     patches=np.squeeze(patches)
     patch_wid=patches[0].shape[1]
@@ -596,8 +563,9 @@ def imageAugment(datafolder):
     f_label.close()
 
 def dataAugument(img_folder, label_folder, out_folder,path_size,overlap_ratio):
-#    crop_normalized_path(img_folder,label_folder,out_folder,path_size,overlap_ratio,)
+    crop_normalized_path(img_folder,label_folder,out_folder,path_size,overlap_ratio,)
     imageAugment(out_folder)
+
 def crop_normalized_patch_track3(img_folder, label_folder,out_folder,path_size,overlap_ratio):
     if os.path.exists(out_folder)==0:
         os.makedirs(out_folder)
@@ -640,6 +608,7 @@ def crop_normalized_patch_track3(img_folder, label_folder,out_folder,path_size,o
                     f_dsm.write('dsm_patch/'+filename[:-10]+'_DSM_'+str(i)+'.tif'+'/n');    
     f_img.close()
     f_label.close()
+
 def crop_normalized_patch_track1(img_folder, label_folder,out_folder,path_size,overlap_ratio):
     resize2size=()
     if os.path.exists(out_folder)==0:
@@ -671,359 +640,16 @@ def crop_normalized_patch_track1(img_folder, label_folder,out_folder,path_size,o
 
                     img_write_path=sub_img_folder+'/'+filename[:-4]+'_'+str(i)+'.jpg'
                     label_write_path=sub_label_folder+'/'+filename[:-4]+'_'+str(i)+'.png'#
-                    cv2.imwrite(img_write_path,imgs[i])
+                    patch_img=cv2.cvtColor(imgs[i],cv2.COLOR_RGB2BGR)
+                    cv2.imwrite(img_write_path,patch_img)
                     cv2.imwrite(label_write_path,labels[i])                    
                     f_img.write(filename[:-4]+'_'+str(i)+'.jpg'+'\n');
                     f_label.write(filename[:-4]+'_'+str(i)+'.png'+'\n');#
     f_img.close()
     f_label.close()
 
-def AnalyzSampleCategory(label_folder):
-
-    lists_1=[]
-    lists_2=[]
-    for i in range(facade_params.Num_Category):
-        lists_1.append([])
-        lists_2.append([])
-    ratios=[0.02]*facade_params.Num_Category#'What is this? 1: window; 2: wall; 3: door; 4: balcony; 5: others;0:background '
-    count=0
-    for filename in os.listdir(label_folder):    ##JAX_004_007_CLS  JAX_004_007_RGB
-        file_apx=filename[-3:]
-        if file_apx=='png' or  file_apx=='tif':
-            label=cv2.imread(os.path.join(label_folder,filename),0)
-            num_class=label.max()
-           # label=convertLas2Train(label, params.LABEL_MAPPING_LAS2TRAIN)
-            img_size=label.shape[0]*label.shape[1]
-            count=count+1
-            for i in range(num_class):
-                mask=(label==i)
-                y_new = label[mask]
-                aa=y_new.size/img_size
-                # if aa>ratios[i]:
-                #     lists_1[i].append(filename)
-                # else:
-                #     lists_2[i].append(filename)
-                if aa>ratios[i]:
-                    lists_1[i].append(str(count))
-                else:
-                    lists_2[i].append(str(count))
-    
-    return lists_1,lists_2
 
 
-
-def AnalyzCategoryHeight(label_folder):
-    class_names=['ground','tree','roof','water','bridge']
-    lists_1=[210*0]*params.NUM_CATEGORIES
-
-    img_files = glob.glob(os.path.join(label_folder, '*CLS.tif'))
-    for filename in img_files:    ##JAX_004_007_CLS  JAX_004_007_RGB
-
-        label=load_img(os.path.join(label_folder,filename))
-        dsm=load_img(os.path.join(label_folder,filename.replace('CLS','AGL')))
-        label=convertLas2Train(label, params.LABEL_MAPPING_LAS2TRAIN)
-        max_dsm=np.max(dsm)
-        if max_dsm>70:
-            print('max is:',max_dsm)
-            print('in image:',filename)
-        min_dsm=np.min(dsm)
-        if min_dsm<-3:
-            print('min is:',min_dsm)
-            print('in image:',filename)
-        find_nan = np.where(dsm == dsm, 1, 0)
-        if np.min(find_nan)==0:
-            print('NAN in image:',filename)
-        for i in range(params.NUM_CATEGORIES):
-            mask=(label==i)
-            cc=dsm[mask]
-            hist, _ = np.histogram(cc, range=(-1, 200), bins=201)
-            hist_av=hist/dsm.shape[1]/dsm.shape[0]
-            lists_1[i]=lists_1[i]+hist_av
-            #############
-    for i in range(params.NUM_CATEGORIES):
-        data=lists_1[i]
-        plt.plot(range(-1,200),data)
-        #plt.hist(data,201,range=(-1,200))
-    #设置出横坐标
-        plt.xlabel('height(m)')
-    #设置纵坐标的标题
-        plt.ylabel('Number of occurences')
-    #设置整个图片的标题
-        plt.title('Frequency distribution of '+class_names[i] )
-
-    # 展示出我们的图片
-        plt.show()
-
-    return lists_1
-
-def GenerateMSIdata(img_folder,label_folder,out_folder,path_size,overlap_ratio):
-    resize2size=()
-    if os.path.exists(out_folder)==0:
-        os.makedirs(out_folder)
-    sub_img_folder=os.path.join(out_folder,'msi_patch')
-    if os.path.exists(sub_img_folder)==0:
-        os.makedirs(sub_img_folder)
-    sub_label_folder=os.path.join(out_folder,'label_patch')#
-    if os.path.exists(sub_label_folder)==0:
-        os.makedirs(sub_label_folder)
-    img_list_file=os.path.join(out_folder,'msi_list.txt')
-    label_list_file=os.path.join(out_folder,'label_list.txt')#
-    f_img = open(img_list_file,'w')
-    f_label = open(label_list_file,'w')
-    gd_reader = GRID()
-    for filename in os.listdir(img_folder):    ##JAX_004_007_CLS  JAX_004_007_RGB
-        file_apx=filename[-3:]
-        if file_apx=='jpg' or  file_apx=='png' or  file_apx=='tif':
-            label_path=os.path.join(label_folder , filename[:-7]+'CLS.tif')
-            img_path=os.path.join(img_folder,filename)
-            if 1:#os.path.exists(label_path):
-                [imgs,labels,size_o]=normalize_image_to_path(img_path,label_path,path_size,overlap_ratio,label_input=False,resize2size=resize2size,convertLab=False,pad_edge=1,normalize_dsm=0)
-                for i in range(len(imgs)):
-                    img_write_path=sub_img_folder+'/'+filename[:-4]+'_'+str(i)+'.tif'
-                    #label_write_path=sub_label_folder+'/'+filename[:-8]+'_AGL_'+str(i)+'.tif'#
-                    gd_reader.write_img(img_write_path,[],[],imgs[i]) #写数据
-                    #gd_reader.write_img(label_write_path,[],[],labels[i]) #写数据
-                    f_img.write(filename[:-4]+'_'+str(i)+'.tif'+'/n');
-                    f_label.write(filename[:-8]+'_CLS_'+str(i)+'.tif'+'/n');#
-    f_img.close()
-    f_label.close()
-def HardSample(img_folder, label_folder, prediction_folder):
-    from track1_metrics import compute_metrics
-    check_folder='G:/programs/dfc2019-master/data/checkfolder2'
-    if os.path.exists(check_folder)==0:
-        os.makedirs(check_folder)
-    glob_path=os.path.join(label_folder,'*.tif')
-    files=glob.glob(glob_path)
-    bad_ids=[]
-    erres=[]
-    class_nums=[]
-    cc=1
-    hard_list_file=os.path.join(check_folder,'hard_list.txt')
-    error_file=os.path.join(check_folder,'error.txt')
-    number_file=os.path.join(check_folder,'number.txt')
-    f_hard = open(hard_list_file,'w')
-    f_erre = open(error_file,'w')
-    f_num = open(number_file,'w')
-
-    for file in files:
-        img_name=os.path.split(file)[-1]
-        
-        predict=os.path.join(prediction_folder,img_name)
-        #predict=load_img(os.path.join(prediction_folder,img_name))
-        error,nums=compute_metrics(predict,file)
-        #true_error=error[error>0]
-        true_error=error[nums>8242]
-        if np.min(true_error)<0.5:
-            bad_ids.append(cc)
-            erres.append(error)
-            class_nums.append(nums)
-            img=load_img(predict)*50
-            label=load_img(file)*50
-            immm=load_img(os.path.join(img_folder,img_name.replace('CLS','RGB')))
-            tifffile.imsave(os.path.join(check_folder,img_name), img, compress=6)
-            tifffile.imsave(os.path.join(check_folder,img_name[:-4]+'_.tif'), label, compress=6)
-            tifffile.imsave(os.path.join(check_folder,img_name[:-4]+'_s.tif'), immm, compress=6)
-            f_hard.write(str(cc))
-            f_hard.write('\n')
-            
-            f_erre.write(str(list(error)))
-            f_erre.write('\n')
-            f_num.write(str(list(nums)))
-            f_num.write('\n')
-        cc=cc+1
-    f_hard.close()
-    f_erre.close()
-    f_num.close()
-
-def HardHeightSamples(img_folder, label_folder, dsm_folder, prediction_folder):
-    from track1_metrics import compute_height
-    check_folder='G:/programs/dfc2019-master/data/height_checkfolder_bridge'
-    if os.path.exists(check_folder)==0:
-        os.makedirs(check_folder)
-    glob_path=os.path.join(dsm_folder,'*AGL.tif')
-    files=glob.glob(glob_path)
-    bad_ids=[]
-    erres=[]
-    class_nums=[]
-    cc=1
-    hard_list_file=os.path.join(check_folder,'hard_list.txt')
-    error_file=os.path.join(check_folder,'error.txt')
-    number_file=os.path.join(check_folder,'number.txt')
-    f_hard = open(hard_list_file,'w')
-    f_erre = open(error_file,'w')
-    f_num = open(number_file,'w')
-
-    for file in files:
-        img_name=os.path.split(file)[-1]
-        
-        predict=os.path.join(prediction_folder,img_name)
-        #predict=load_img(os.path.join(prediction_folder,img_name))
-        label=os.path.join(label_folder,img_name.replace('AGL','CLS'))
-        accurary,nums=compute_height(predict,file,label)
-        if accurary[4]<0.5 and accurary[4]>0.01 and nums[4]>4000:
-            stop_here=1
-        # accurary=accurary[nums>8242]
-        # if np.min(accurary)<0.5:
-            bad_ids.append(cc)
-            erres.append(accurary)
-            class_nums.append(nums)
-            pre=load_img(predict)#*50
-            tru_dsm=load_img(file)#*50
-            class_label=load_img(label)
-            immm=load_img(os.path.join(img_folder,img_name.replace('AGL','RGB')))
-            tifffile.imsave(os.path.join(check_folder,img_name), pre, compress=6)
-            tifffile.imsave(os.path.join(check_folder,img_name[:-4]+'_.tif'), tru_dsm, compress=6)
-            tifffile.imsave(os.path.join(check_folder,img_name[:-4]+'_s.tif'), immm, compress=6)
-            tifffile.imsave(os.path.join(check_folder,img_name[:-4]+'_label.tif'), class_label, compress=6)
-            f_hard.write(str(cc))
-            f_hard.write('\n')
-            
-            f_erre.write(str(list(accurary)))
-            f_erre.write('\n')
-            f_num.write(str(list(nums)))
-            f_num.write('\n')
-        cc=cc+1
-    f_hard.close()
-    f_erre.close()
-    f_num.close()
-   
-def HeightScale(img_folder, label_folder, dsm_folder, prediction_folder):
-    from track1_metrics import ComputScale
-    
-    import matplotlib.pyplot as plt
-
-    check_folder='G:/programs/dfc2019-master/data/height_scales'
-    if os.path.exists(check_folder)==0:
-        os.makedirs(check_folder)
-    glob_path=os.path.join(dsm_folder,'*AGL.tif')
-    files=glob.glob(glob_path)
-    true_values=[]
-    pre_values=[]
-    ################
-    for file in files:
-        img_name=os.path.split(file)[-1]
-        
-        predict=os.path.join(prediction_folder,img_name)
-        #predict=load_img(os.path.join(prediction_folder,img_name))
-        label=os.path.join(label_folder,img_name.replace('AGL','CLS'))
-        truth_height,pre_height=ComputScale(predict,file,label,lab_num=1)
-        true_values.extend(truth_height)
-        pre_values.extend(pre_height)
-    np.save("true_values_tree_2.npy",true_values)
-    np.save("pre_values_tree_2.npy",pre_values)
-    ###############
-    true_values= np.load("true_values_tree_2.npy")
-    pre_values= np.load("pre_values_tree_2.npy")+10
-    #用3次多项式拟合
-    x=pre_values
-    y=true_values
-    bef_eror=np.sum(abs(np.array(x)-y))/len(x)
-    f1 = np.polyfit(x, y, 2)
-   # res=f1.
-    p1 = np.poly1d(f1)
-    print(p1)
-    
-    #也可使用yvals=np.polyval(f1, x)
-    yvals = p1(x)  #拟合y值
-    eror=np.sum(abs(yvals-y))/len(yvals)
-    bef_eror=np.sum(abs(np.array(x)-y))/len(x)
-    print('error: ', eror)
-    print(', bef_eror: ', bef_eror)
-    #绘图
-    plot1 = plt.plot(x[0:5000], y[0:5000], 's',label='original values')
-    plot2 = plt.plot(x[0:5000], yvals[0:5000], 'r',label='polyfit values')
-    plt.xlabel('x')
-    plt.ylabel('y')
-    plt.legend(loc=4) #指定legend的位置右下角
-    plt.title('polyfitting')
-    plt.show()
-
-
-def DataSampleAnalysis(img_folder,label_folder,out_folder,path_size,overlap_ratio):
-    driver = gdal.GetDriverByName('HFA')
-    driver.Register()
-    #crop_normalized_patch_track1(img_folder,label_folder,out_folder,path_size,overlap_ratio)
- 
-    patch_lable=os.path.join(out_folder,'label_patch/')
-    lists_1,lists_2=AnalyzSampleCategory(patch_lable)##'What is this? 1: window; 2: wall; 3: door; 4: balcony; 5: others;0:background '
-    num_samples=len(lists_1[0])+len(lists_2[0])
-    ratios=[]
-    txt_files=[]
-    txt_folder=os.path.join(out_folder,'class_file_record')
-    if not os.path.exists(txt_folder):
-        os.mkdir(txt_folder)
-
-    for i in range(len(lists_1)):
-        ratios.append(len(lists_1[i])/num_samples)
-        txt_files.append(facade_params.category_names[i])
-
-    for i in range(len(txt_files)):
-        file_path=os.path.join(txt_folder,txt_files[i]+'.txt')
-        f=open(file_path,'w')
-        for img in lists_1[i]:
-            f.write(img+'\n');
-        f.close()
-
-
-    # # ground_list_file=os.path.join(out_folder,'ground_list.txt')
-    # # tree_list_file=os.path.join(out_folder,'tree_list.txt')
-    # # roof_list_file=os.path.join(out_folder,'roof_list.txt')
-    # # water_list_file=os.path.join(out_folder,'water_list.txt')
-    # # bridge_list_file=os.path.join(out_folder,'bridge_list.txt')
-    # background_list_file=os.path.join(out_folder,'background.txt')
-    # ground_list_file=os.path.join(out_folder,'window.txt')
-    # tree_list_file=os.path.join(out_folder,'wall.txt')
-    # roof_list_file=os.path.join(out_folder,'door.txt')
-    # water_list_file=os.path.join(out_folder,'balcony.txt')
-    # bridge_list_file=os.path.join(out_folder,'orths.txt')
-
-    # f_background = open(background_list_file,'w')
-
-    # f_ground = open(ground_list_file,'w')
-    # f_tree = open(tree_list_file,'w')
-    # f_roof = open(roof_list_file,'w')
-    # f_water = open(water_list_file,'w')
-    # f_bridge = open(bridge_list_file,'w')
-
-    # for img in lists_1[0]:
-    #     f_background.write(img+'/n');
-
-    # for img in lists_1[1]:
-    #     f_ground.write(img+'/n');
-    # for img in lists_1[2]:
-    #     f_tree.write(img+'/n');
-    # for img in lists_1[3]:
-    #     f_roof.write(img+'/n');
-    # for img in lists_1[4]:
-    #     f_water.write(img+'/n');
-    # for img in lists_1[5]:
-    #     f_bridge.write(img+'/n');
-
-# ###########################
-#     ground_list_file=os.path.join(out_folder,'ground_list_no.txt')
-#     tree_list_file=os.path.join(out_folder,'tree_list_no.txt')
-#     roof_list_file=os.path.join(out_folder,'roof_list_no.txt')
-#     water_list_file=os.path.join(out_folder,'water_list_no.txt')
-#     bridge_list_file=os.path.join(out_folder,'bridge_list_no.txt')
-
-#     f_ground = open(ground_list_file,'w')
-#     f_tree = open(tree_list_file,'w')
-#     f_roof = open(roof_list_file,'w')
-#     f_water = open(water_list_file,'w')
-#     f_bridge = open(bridge_list_file,'w')
-
-#     for img in lists_2[0]:
-#         f_ground.write(img+'/n');
-#     for img in lists_2[1]:
-#         f_tree.write(img+'/n');
-#     for img in lists_2[2]:
-#         f_roof.write(img+'/n');
-#     for img in lists_2[3]:
-#         f_water.write(img+'/n');
-#     for img in lists_2[4]:
-#         f_bridge.write(img+'/n');
-#         ##do data balance. 
-#     f_ground.close()
 
 
 def PreAug(test_image): 
@@ -1058,42 +684,70 @@ def PreAugBack(test_image):
         img_back.append(test_image)
     return img_back
 
+def DataSampleAnalysis(img_folder,label_folder,out_folder,path_size,overlap_ratio):
+    driver = gdal.GetDriverByName('HFA')
+    driver.Register()
+    crop_normalized_patch_track1(img_folder,label_folder,out_folder,path_size,overlap_ratio)
+ 
+    patch_lable=os.path.join(out_folder,'label_patch/')
+    lists_1,lists_2=AnalyzSampleCategory(patch_lable)##'What is this? 1: window; 2: wall; 3: door; 4: balcony; 5: others;0:background '
+    num_samples=len(lists_1[0])+len(lists_2[0])
+    ratios=[]
+    txt_files=[]
+    txt_folder=os.path.join(out_folder,'class_file_record')
+    if not os.path.exists(txt_folder):
+        os.mkdir(txt_folder)
+
+    for i in range(len(lists_1)):
+        ratios.append(len(lists_1[i])/num_samples)
+        txt_files.append(params.category_names[i])
+
+    for i in range(len(txt_files)):
+        file_path=os.path.join(txt_folder,txt_files[i]+'.txt')
+        f=open(file_path,'w')
+        for img in lists_1[i]:
+            f.write(img+'\n');
+        f.close()
+
+def AnalyzSampleCategory(label_folder):
+    
+    lists_1=[]
+    lists_2=[]
+    for i in range(params.NUM_CATEGORIES):
+        lists_1.append([])
+        lists_2.append([])
+    ratios=[0.02]*params.NUM_CATEGORIES#'What is this? 1: window; 2: wall; 3: door; 4: balcony; 5: others;0:background '
+    count=0
+    for filename in os.listdir(label_folder):    ##JAX_004_007_CLS  JAX_004_007_RGB
+        file_apx=filename[-3:]
+        if file_apx=='png' or  file_apx=='tif':
+            label=cv2.imread(os.path.join(label_folder,filename),0)
+            num_class=label.max()
+           # label=convertLas2Train(label, params.LABEL_MAPPING_LAS2TRAIN)
+            img_size=label.shape[0]*label.shape[1]
+            count=count+1
+            for i in range(num_class):
+                mask=(label==i)
+                y_new = label[mask]
+                aa=y_new.size/img_size
+                # if aa>ratios[i]:
+                #     lists_1[i].append(filename)
+                # else:
+                #     lists_2[i].append(filename)
+                if aa>ratios[i]:
+                    lists_1[i].append(str(count))
+                else:
+                    lists_2[i].append(str(count))
+    
+    return lists_1,lists_2
 
 if __name__ == '__main__':
     
-    # img_folder='G:/DataSet/NUS_Facade/new_data_r'
-    # label_folder='G:/DataSet/NUS_Facade/new_data_label'
-    # out_folder='G:/DataSet/NUS_Facade/normalized_patchs'G:/DataSet/GRSS2019Contest/Track1-RGBGRSS2019Contest/Train-Track1-Truth/Track1-Truth
-    # img_folder='G:/DataSet/GRSS2019Contest/Track1-RGB'
-    # label_folder='G:/DataSet/GRSS2019Contest/Train-Track1-Truth/Track1-Truth'
-    # out_folder='G:/DataSet/GRSS2019Contest/Track1-RGB_pathces_512/'
-    # path_size=(512,512)
-    # overlap_ratio=0
-    # dataAugument(img_folder,label_folder,out_folder,path_size,overlap_ratio)
-    #######
-    img_folder=r'G:\DataSet\BuildingFacade\CMP\CMP_facade_DB_base\base'
-    label_folder=r'G:\DataSet\BuildingFacade\CMP\CMP_facade_DB_base\labels'
-    out_folder='G:/DataSet/CMP_Facade/train_data/512_patchs'
+    img_folder=r'G:\DataSet\TianZhi2019\src'
+    label_folder=r'G:\DataSet\TianZhi2019\label'
+    out_folder=r'C:\TianZhi2019\data'
     path_size=(512,512)
     overlap_ratio=0.5
-    DataSampleAnalysis(img_folder,label_folder,out_folder,path_size,overlap_ratio)
-    ###################
-    # label_folder='C:/TrainData/Track1/Train/Track1-Truth/'
-    # AnalyzCategoryHeight(label_folder)
-    #############
-    # label_folder='C:/TrainData/Track1/Train/Track1-Truth/'
-    # msi_folder='C:/TrainData/Track1/Train/orthos/'
-    # GenerateMSIdata(msi_folder,label_folder,out_folder,path_size,overlap_ratio)
-    ###################
-    # img_folder='C:/TrainData/Track1/train/imgs'
-    # pre_folder='G:/programs/dfc2019-master/track1/data/validate/track1-unet_rgb_h-evenloss-retrain-20190322e06-forval'
-    
-    # truth_folder='C:/TrainData/Track1/train/Track1-Truth'
-    # label_folder='C:/TrainData/Track1/train/Track1-Truth'
-    # class_test_folder='C:/TrainData/Track1/train/Track1-Truth'
-    # #HeightScale(img_folder,label_folder,truth_folder,pre_folder)
-
-
-    # from track1_metrics import compute_metrics_height
-    # compute_metrics_height(pre_folder,class_test_folder,truth_folder)
-    #HardSample('C:/TrainData/Track1/train/patch_512/img_patch','C:/TrainData/Track1/train/patch_512/label_patch', 'C:/TrainData/Track1/train/resized_512-/class_patch')
+    crop_normalized_patch_track1(img_folder,label_folder,out_folder,path_size,overlap_ratio)
+    #DataSampleAnalysis(img_folder,label_folder,out_folder,path_size,overlap_ratio)
+    #######
