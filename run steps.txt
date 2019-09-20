@@ -1,0 +1,24 @@
+0. change the settings(GPUS, NUM_CHANNELS,BATCH_SZ) in params.py
+
+
+1. to get the 512*512 patches, run DataAugment.py (change the folder path)
+
+if __name__ == '__main__':
+    
+    img_folder=r'G:\DataSet\TianZhi2019\src'
+    label_folder=r'G:\DataSet\TianZhi2019\label'
+    out_folder=r'C:\TianZhi2019\data'
+    path_size=(512,512)
+    overlap_ratio=0.5
+    crop_normalized_patch_track1(img_folder,label_folder,out_folder,path_size,overlap_ratio)
+
+2. train the U-Net, run CLS_main.py (change the folder path)
+
+if __name__ == '__main__':
+
+    data_folder=r'C:\TianZhi2019\data'
+    train_net(data_folder)
+
+the trained weights will be saved in ./checkpoint/unet_rgb_b
+
+3. test the U-Net.
