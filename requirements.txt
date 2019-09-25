@@ -3,4 +3,4 @@ keras 2.2.4
 tifffile
 scipy
 pillow
-albumentations
+albumentations 0.2.0

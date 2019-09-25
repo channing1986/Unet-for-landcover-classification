@@ -231,6 +231,8 @@ def _load_batch_helper(inputDict):
     inputs=[]
     labels=[]
     img_data=load_img(rgb_file)
+    if len(img_data.shape)<3:
+        img_data=cv2.cvtColor(img_data,cv2.COLOR_GRAY2RGB)
     label_data=load_img(gts_file)
     if gts_file[-9:-6]=='AGL':
         label_data[np.isnan(label_data)]=params.IGNORE_VALUE
@@ -285,6 +287,8 @@ def _load_batch_helper(inputDict):
     labels.append(label_data)    
     inputs.append(imageMedium)
     labels.append(labelMedium)
+    # inputs.append(img_data)
+    # labels.append(label_data)   
     return inputs, labels
 def input_generator_mp(img_files, label_files, batch_size, extra_files=[],net_name='',num_category=5):
     """
