@@ -49,7 +49,7 @@ MAX_VAL = 65536  # MSI images are int16, so dividing by this instead of 255
 # ----------------------------------------------------
 # MODEL TRAINING/TESTING
 
-GPUS = '0'  # GPU indices to restrict usage
+GPUS = '1'  # GPU indices to restrict usage
 NUM_CHANNELS = 3
 BATCH_SZ = 6
 #IMG_SZ = (1024, 1024)  # this code assumes all images in the training set have the same numbers of rows and columns

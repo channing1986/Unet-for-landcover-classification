@@ -206,7 +206,7 @@ class GRID:
 
         del dataset
 
-def img2patches(img, patch_size,overlap_rati):
+def Img2Patch(img, patch_size,overlap_rati):
     patches=[]
 
     patch_range=calculate_cut_range(img.shape[0:2],patch_size,overlap_rati)
@@ -363,52 +363,6 @@ def GetPatchWeight(patch_size=[256,256],pad=32,last_value=0.4):
             patch_weights[y,x]=weight
     return patch_weights
 
-def patch2img_height(patches,img_size,patch_weights,num_class=5, overlap=0.5):
-    patches=np.squeeze(patches)
-    patch_wid=patches[0].shape[1]
-    patch_hei=patches[0].shape[0]
-    vote=np.zeros((img_size[0],img_size[1]))
-    numbers=np.zeros((img_size[0],img_size[1]))
-    patch_ranges=calculate_cut_range(img_size, patch_size=[patch_hei,patch_wid],overlap=overlap)
-    path_vote=np.ones((patch_hei,patch_wid))
-    N=len(patches)
-    idx = range(N)
-   # patch_weights = patch_weights[:,:,np.newaxis]
-    batchInds = get_batch_inds(4, idx, N) 
-    for inds in range(len(batchInds)):
-        img_batchs = patches[ batchInds[inds]]
- #        img_batch=np.array(img_batchs,np.float32)
-        for id in range(len(img_batchs)):
-            patch=img_batchs[id]
-            patch=np.squeeze(patch)
-            patch=np.array(patch,np.float32)
-            #patch_mean=np.mean(patch)
-            
-           # currLabel = to_categorical(patch, num_classes=num_class)
-
- #           img_=reduce(img_batchs,0)
-            y_s=round(patch_ranges[inds][0])
-            y_e=round(patch_ranges[inds][1])
-            x_s=round(patch_ranges[inds][2])
-            x_e=round(patch_ranges[inds][3])
-            weighted_patch=patch*patch_weights
-            #for i in range(5):
-            vote[y_s:y_e,x_s:x_e]=vote[y_s:y_e,x_s:x_e]+weighted_patch
-            numbers[y_s:y_e,x_s:x_e]=numbers[y_s:y_e,x_s:x_e]+patch_weights
-
-    # for i in range(len(patches)):
-    #     patch_id=i//4
-    #     patch=np.squeeze(patches[i])
-    #     for x in range(patch_wid):
-    #         for y in range(patch_hei):
-    #             id_y=round(patch_ranges[patch_id][0])+y
-    #             id_x=round(patch_ranges[patch_id][2])+x
-    #             c=patch[y,x]
-    #             vote[id_y,id_x,c]=vote[id_y,id_x,c]+1#patch_weights[y,x]
-    #pred = np.argmax(vote, axis=-1).astype('uint8')
-    pred = vote/numbers
-    pred=np.array(pred,np.float32)
-    return pred
 
 def Patch2Img(patches,img_size,patch_weights,num_class=5, overlap=0.5):
     patches=np.squeeze(patches)
@@ -433,7 +387,7 @@ def Patch2Img(patches,img_size,patch_weights,num_class=5, overlap=0.5):
     return pred
 
 
-def Patch2Img(patches,img_size,patch_weights,num_class=5, overlap=0.5):
+def Patch2Img_o(patches,img_size,patch_weights,num_class=5, overlap=0.5):
     patches=np.squeeze(patches)
     if len(patches.shape)<3:
         patch_wid=patches.shape[1]
@@ -654,7 +608,8 @@ def crop_normalized_patch_track1(img_folder, label_folder,out_folder,path_size,o
 
 def PreAug(test_image): 
     img_aug=[] 
-    if len(test_image.shape)>4:
+    test_image=np.squeeze(test_image)
+    if len(test_image.shape)>=4:
         for i in range(len(test_image)):
             img_data=test_image[i]
             for a_id in range (4):
@@ -666,23 +621,30 @@ def PreAug(test_image):
             img_aug.append(img_a)
     return img_aug
 
-def PreAugBack(test_image): 
+def PreAugBack(test_image,num_class): 
     img_back=[]
-    if len(test_image.shape)>4:
-        for id in range(len(test_image)):
-            img=test_image[id]
-            i=id%4
-            if i==0:
-                img_back.append(img)
-            else:
-                for mmm in range (i):
-                    img=np.squeeze(img)
-                    img=np.rot90(img)
-                    img = np.expand_dims(img, axis=0)
-                img_back.append(img)
-    else:
-        img_back.append(test_image)
-    return img_back
+    imgs=[]
+    for id in range(len(test_image)):
+        img=test_image[id]
+        i=id%4
+        if i==0:
+            img_back.append(img)
+        else:
+            for mmm in range (i):
+                img=np.squeeze(img)
+                img=np.rot90(img)
+                img = np.expand_dims(img, axis=0)
+            img_back.append(img)
+    for id in range(round(len(img_back)/4)):
+        a = to_categorical(img_back[id*4], num_classes=num_class)
+        a=a+to_categorical(img_back[id*4+1], num_classes=num_class)
+        a=a+to_categorical(img_back[id*4+2], num_classes=num_class)
+        a=a+to_categorical(img_back[id*4+3], num_classes=num_class)
+        a = np.argmax(a, axis=-1).astype('uint8')
+        imgs.append(a)
+
+
+    return imgs
 
 def DataSampleAnalysis(img_folder,label_folder,out_folder,path_size,overlap_ratio):
     driver = gdal.GetDriverByName('HFA')

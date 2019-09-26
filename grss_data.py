@@ -709,28 +709,14 @@ def load_all_data_files(data_folder,vali_ratio=0.1):
     return orthos[:num],label[:num],orthos[num:],label[num:]
 
 
-def load_all_data_test(data_folder,channels='rgb'):
-    imgs=[]
+def load_all_data_test(data_folder, extension='.tif'):
     pathes=[]
     #img_folder=os.path.join(data_folder,'epipolar image')
-    img_folder=os.path.join(data_folder,'imgs')
-    if channels[:3]=='rgb':        
-        img_files = glob.glob(os.path.join(img_folder, '*RGB.tif'))
-    elif channels[:3]=='msi':
-        img_files = glob.glob(os.path.join(img_folder, '*MSI.tif'))
-
+    #img_folder=os.path.join(data_folder,'imgs')
+    img_files = glob.glob(os.path.join(data_folder, '*'+extension))
     for imgPath in img_files:
         imageName = os.path.split(imgPath)[-1]
-        imgs.append(imageName)
         pathes.append(imgPath)
-    ###########################
-    ortho_list_file=os.path.join(data_folder,'test_img_list.txt')
-
-    f_ortho = open(ortho_list_file,'w')
- 
-    for i in range(len(imgs)):
-        f_ortho.write(imgs[i]+'\n');
-    f_ortho.close()
     return pathes
 
 def GetSmallTreeLabel(label_folder,out_folder):

@@ -2,6 +2,7 @@ __author__ = 'Changlin'
 __version__ = 0.1
 
 import numpy as np
+import math
 from dataFunctions import *
 from keras.applications import imagenet_utils
 from keras.callbacks import ModelCheckpoint,CSVLogger
@@ -95,16 +96,16 @@ class Class_net:
         if not net_name:
             net_name='unet_rgb_c'
         if not results_folder:
-            results_folder=os.path.join(params.OUTPUT_DIR,net_name+weight_path)        
+            results_folder=os.path.join(params.OUTPUT_DIR,'_'+net_name+os.path.split(weight_path)[-1])        
         if os.path.exists(results_folder)==0:
             os.mkdir(results_folder)
         
         from dataFunctions import convert_labels
         
         #####
-        channels=net_name.split('_')[1]
+        extension='.tif'
         #img_test=load_all_data_test_val(data_folder,channels)
-        img_test=load_all_data_test(data_folder,channels)
+        img_test=load_all_data_test(data_folder,extension)
 
         if pre_patch:
             input_shape=self.config.PATCH_SZ
@@ -116,11 +117,13 @@ class Class_net:
         extra_class=False
         convertLab=False
 
-        patch_weights=GetPatchWeight([input_shape[0],input_shape[1]],pad=64,last_value=0.05)
+        if pre_patch:
+            patch_weights=GetPatchWeight([input_shape[0],input_shape[1]],pad=64,last_value=0.05)
+            
         batch_size=1
         overlap=0.00
         resize2size=()
-            
+        resized=False
         print('Number of files = ', len(img_test))
         path_size=([input_shape[0],input_shape[1]])
 
@@ -129,32 +132,49 @@ class Class_net:
             ortho_path=img_test[i]
             predicted_batches=[]
             imageName = os.path.split(ortho_path)[-1]
-            outName = imageName.replace('RGB', "CLS")
+            #outName = imageName.replace('RGB', "CLS")
+            outName = imageName[:-4]+'_CLS'+imageName[-4:]
             test_image=load_img(ortho_path)
-            if pre_patch:
-                test_image=Img2Patch(test_image,patch_size=path_size,overlap_rati=overlap)
-            if pre_augment:
-                test_image=PreAug(test_image)
+            if len(test_image.shape)<3:
+                test_image=cv2.cvtColor(test_image, cv2.COLOR_BGRA2RGB)
+            test_image=test_image/125.-1
 
-            N = len(test_image) #total number of images
+            if pre_patch:
+                test_image_patches=Img2Patch(test_image,patch_size=path_size,overlap_rati=overlap)
+                N = len(test_image_patches)
+            else:
+                size_10=test_image.shape[0]
+                size_20=test_image.shape[1]
+                size_1=math.ceil(test_image.shape[0]/32)*32
+                size_2=math.ceil(test_image.shape[1]/32)*32
+                test_image_patches=test_image
+                if size_1!=size_10 or size_2!=size_20:
+                    test_image_patches=cv2.resize(test_image_patches, (size_1,size_2))
+                test_image_patches=test_image_patches[np.newaxis,:,:,:]
+                N=1
+            if pre_augment:
+                test_image_patches=PreAug(test_image_patches)
+                N=N*4#total number of images
             idx = range(N)
             batchInds = get_batch_inds(batch_size, idx, N,predict=True) 
             for inds in range(len(batchInds)):
-                img_batch = [test_image[ind] for ind in batchInds[inds]]
+                img_batch = [test_image_patches[ind] for ind in batchInds[inds]]
                 img_batch=np.array(img_batch,np.float32)
                 pred = model.predict(img_batch)
                 pred = np.argmax(pred, axis=-1).astype('uint8')
                 predicted_batches.extend(pred)
-            
+
+            pred=predicted_batches
             if pre_augment:
-                preds=PreAugBack(predicted_batches)
+                pred=PreAugBack(pred,num_class=num_class)
             if pre_patch:
-                preds=Patch2Img(preds)
-            else:
-                preds=predicted_batches
+                pred=Patch2Img(pred,test_image.shape,patch_weights,num_class=num_class, overlap=overlap)
+                
 
-            pred=convert_labels(pred,self.config,toLasStandard=True)
-
+            #pred=convert_labels(pred,self.config,toLasStandard=True)
+            pred=np.squeeze(pred)
+            if (not pre_patch) and (size_1!=size_10 or size_2!=size_20):
+                pred=cv2.resize(pred, (size_10,size_20),interpolation=cv2.INTER_NEAREST)
             tifffile.imsave(os.path.join(results_folder, outName), pred, compress=6)
 
     
@@ -171,18 +191,21 @@ def test_net(data_folder):
 
     detector=Class_net(params)
     net_name='unet_rgb_c'
-    weight_file='weights.35.hdf5'
+    weight_file='weights.66.hdf5'
     weight_path=os.path.join(params.CHECKPOINT_DIR,net_name,weight_file)
     results_folder=os.path.join(params.OUTPUT_DIR,net_name+weight_file)
     num_class=params.NUM_CATEGORIES
     ####data_folder,weight_path,pre_augment=False,pre_patch=False, results_folder='',net_name='',num_class=''
-    detector.test(data_folder,weight_path,pre_augment=False,pre_patch=False)
+    pre_patch=True
+    pre_augment=True
+    detector.test(data_folder,weight_path,pre_augment=pre_augment,pre_patch=pre_patch)
 
 if __name__ == '__main__':
 
     data_folder=r'C:\TianZhi2019\data'
-    train_net(data_folder)
-    #test_net('C:/TrainData/track3/Test_new/')
+    #train_net(data_folder)
+    test_folder=r'G:\DataSet\TianZhi2019\src'
+    test_net(test_folder)
     #test_net('C:/TrainData/Track1/train/')
     #test_net('C:/TrainData/Track1/Test-Track1',False)
  #   test_net('G:/shengxi',False)
